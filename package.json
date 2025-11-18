@@ -13,6 +13,9 @@
     "build": "tsc",
     "start": "node dist/app/main.js",
     "dev": "ts-node src/app/main.ts",
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
     "lint": "eslint .",
     "lint:fix": "eslint --fix .",
     "format": "prettier --write .",
@@ -51,6 +54,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^9.19.0",
+    "@types/jest": "^29.5.14",
     "@types/node": "^22.10.10",
     "@typescript-eslint/eslint-plugin": "^8.22.0",
     "@typescript-eslint/parser": "^8.22.0",
@@ -58,7 +62,9 @@
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.2.3",
     "globals": "^15.14.0",
+    "jest": "^29.7.0",
     "prettier": "^3.4.2",
+    "ts-jest": "^29.2.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.7.3"
   }

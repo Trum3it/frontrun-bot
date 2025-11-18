@@ -30,6 +30,8 @@ export class TradeMonitorService {
   private timer?: NodeJS.Timeout;
   private readonly processedHashes: Set<string> = new Set();
   private readonly lastFetchTime: Map<string, number> = new Map();
+  private readonly MAX_HASH_CACHE_SIZE = 10000;
+  private readonly CLEANUP_BATCH_SIZE = 5000;
 
   constructor(deps: TradeMonitorDeps) {
     this.deps = deps;
@@ -51,11 +53,30 @@ export class TradeMonitorService {
   private async tick(): Promise<void> {
     const { logger, env } = this.deps;
     try {
-      for (const trader of this.deps.userAddresses) {
-        await this.fetchTraderActivities(trader, env);
-      }
+      // Fetch all traders in parallel for better performance
+      await Promise.allSettled(
+        this.deps.userAddresses.map((trader) => this.fetchTraderActivities(trader, env)),
+      );
+      this.cleanupHashCache();
     } catch (err) {
       logger.error('Monitor tick failed', err as Error);
+    }
+  }
+
+  /**
+   * Prevents unbounded growth of processedHashes Set by removing oldest entries
+   * when the cache size exceeds MAX_HASH_CACHE_SIZE
+   */
+  private cleanupHashCache(): void {
+    if (this.processedHashes.size > this.MAX_HASH_CACHE_SIZE) {
+      const hashesToDelete = Array.from(this.processedHashes).slice(0, this.CLEANUP_BATCH_SIZE);
+      hashesToDelete.forEach((hash) => this.processedHashes.delete(hash));
+
+      if (this.deps.env.debugEnabled) {
+        this.deps.logger.debug(
+          `Cleaned up ${hashesToDelete.length} old transaction hashes (cache size: ${this.processedHashes.size})`,
+        );
+      }
     }
   }
 

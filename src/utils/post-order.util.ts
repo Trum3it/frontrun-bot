@@ -1,5 +1,6 @@
 import type { ClobClient } from '@polymarket/clob-client';
 import { OrderType, Side } from '@polymarket/clob-client';
+import type { Logger } from './logger.util';
 
 export type OrderSide = 'BUY' | 'SELL';
 export type OrderOutcome = 'YES' | 'NO';
@@ -10,11 +11,24 @@ export type PostOrderInput = {
   outcome: OrderOutcome;
   side: OrderSide;
   sizeUsd: number;
-  maxAcceptablePrice?: number;
+  expectedPrice?: number; // Price from trade signal
+  maxSlippagePercent?: number; // Maximum allowed slippage (default: 2%)
+  maxAcceptablePrice?: number; // Absolute price limit (overrides slippage)
+  logger?: Logger;
 };
 
 export async function postOrder(input: PostOrderInput): Promise<void> {
-  const { client, marketId, outcome, side, sizeUsd, maxAcceptablePrice } = input;
+  const {
+    client,
+    marketId,
+    outcome,
+    side,
+    sizeUsd,
+    expectedPrice,
+    maxSlippagePercent = 2.0,
+    maxAcceptablePrice,
+    logger,
+  } = input;
 
   const market = await client.getMarket(marketId);
   if (!market) {
@@ -33,8 +47,38 @@ export async function postOrder(input: PostOrderInput): Promise<void> {
   }
 
   const bestPrice = parseFloat(levels[0].price);
-  if (maxAcceptablePrice && ((isBuy && bestPrice > maxAcceptablePrice) || (!isBuy && bestPrice < maxAcceptablePrice))) {
-    throw new Error(`Price protection: best price ${bestPrice} exceeds max acceptable ${maxAcceptablePrice}`);
+
+  // Calculate slippage if expected price is provided
+  if (expectedPrice) {
+    const slippage = isBuy
+      ? ((bestPrice - expectedPrice) / expectedPrice) * 100
+      : ((expectedPrice - bestPrice) / expectedPrice) * 100;
+
+    if (slippage > 0) {
+      logger?.warn(`Slippage detected: ${slippage.toFixed(2)}%`, {
+        market: marketId,
+        side,
+        expectedPrice,
+        bestPrice,
+        slippage: `${slippage.toFixed(2)}%`,
+      });
+
+      if (slippage > maxSlippagePercent) {
+        throw new Error(
+          `Slippage protection: ${slippage.toFixed(2)}% exceeds maximum ${maxSlippagePercent}% (expected: ${expectedPrice}, actual: ${bestPrice})`,
+        );
+      }
+    }
+  }
+
+  // Absolute price protection (overrides slippage check)
+  if (
+    maxAcceptablePrice &&
+    ((isBuy && bestPrice > maxAcceptablePrice) || (!isBuy && bestPrice < maxAcceptablePrice))
+  ) {
+    throw new Error(
+      `Price protection: best price ${bestPrice} exceeds max acceptable ${maxAcceptablePrice}`,
+    );
   }
 
   const orderSide = isBuy ? Side.BUY : Side.SELL;

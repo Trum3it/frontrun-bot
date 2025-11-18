@@ -4,4 +4,12 @@ dist
 .DS_Store
 *.log
 
+# Test coverage
+coverage
+*.lcov
+.nyc_output
+
+# Test artifacts
+junit.xml
+
 
