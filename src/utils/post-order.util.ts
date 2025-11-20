@@ -6,7 +6,8 @@ export type OrderOutcome = 'YES' | 'NO';
 
 export type PostOrderInput = {
   client: ClobClient;
-  marketId: string;
+  marketId?: string;
+  tokenId: string;
   outcome: OrderOutcome;
   side: OrderSide;
   sizeUsd: number;
@@ -14,22 +15,36 @@ export type PostOrderInput = {
 };
 
 export async function postOrder(input: PostOrderInput): Promise<void> {
-  const { client, marketId, outcome, side, sizeUsd, maxAcceptablePrice } = input;
+  const { client, marketId, tokenId, outcome, side, sizeUsd, maxAcceptablePrice } = input;
 
-  const market = await client.getMarket(marketId);
-  if (!market) {
-    throw new Error(`Market not found: ${marketId}`);
+  // Optional: validate market exists if marketId provided
+  if (marketId) {
+    const market = await client.getMarket(marketId);
+    if (!market) {
+      throw new Error(`Market not found: ${marketId}`);
+    }
   }
 
-  const outcomeIndex = outcome === 'YES' ? 0 : 1;
-  const tokenId = market.tokens[outcomeIndex];
+  let orderBook;
+  try {
+    orderBook = await client.getOrderBook(tokenId);
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('No orderbook exists') || errorMessage.includes('404')) {
+      throw new Error(`Market ${marketId} is closed or resolved - no orderbook available for token ${tokenId}`);
+    }
+    throw error;
+  }
 
-  const orderBook = await client.getOrderBook(tokenId);
+  if (!orderBook) {
+    throw new Error(`Failed to fetch orderbook for token ${tokenId}`);
+  }
+
   const isBuy = side === 'BUY';
   const levels = isBuy ? orderBook.asks : orderBook.bids;
 
   if (!levels || levels.length === 0) {
-    throw new Error(`No ${isBuy ? 'asks' : 'bids'} available for token ${tokenId}`);
+    throw new Error(`No ${isBuy ? 'asks' : 'bids'} available for token ${tokenId} - market may be closed or have no liquidity`);
   }
 
   const bestPrice = parseFloat(levels[0].price);

@@ -100,6 +100,7 @@ export class TradeMonitorService {
         const signal: TradeSignal = {
           trader,
           marketId: activity.conditionId,
+          tokenId: activity.asset,
           outcome: activity.outcomeIndex === 0 ? 'YES' : 'NO',
           side: activity.side.toUpperCase() as 'BUY' | 'SELL',
           sizeUsd: activity.usdcSize || activity.size * activity.price,

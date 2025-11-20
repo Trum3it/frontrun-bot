@@ -71,12 +71,19 @@ export class TradeExecutorService {
       await postOrder({
         client,
         marketId: signal.marketId,
+        tokenId: signal.tokenId,
         outcome: signal.outcome,
         side: signal.side,
         sizeUsd: sizing.targetUsdSize,
       });
+      logger.info(`Successfully executed ${signal.side} order for ${sizing.targetUsdSize.toFixed(2)} USD`);
     } catch (err) {
-      logger.error('Failed to copy trade', err as Error);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      if (errorMessage.includes('closed') || errorMessage.includes('resolved') || errorMessage.includes('No orderbook')) {
+        logger.warn(`Skipping trade - Market ${signal.marketId} is closed or resolved: ${errorMessage}`);
+      } else {
+        logger.error(`Failed to copy trade: ${errorMessage}`, err as Error);
+      }
     }
   }
 

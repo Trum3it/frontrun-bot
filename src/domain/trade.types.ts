@@ -1,6 +1,7 @@
 export type TradeSignal = {
   trader: string;
   marketId: string;
+  tokenId: string;
   outcome: 'YES' | 'NO';
   side: 'BUY' | 'SELL';
   sizeUsd: number;
