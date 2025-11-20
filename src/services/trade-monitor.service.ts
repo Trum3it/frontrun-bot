@@ -62,20 +62,40 @@ export class TradeMonitorService {
 
   private async fetchTraderActivities(trader: string, env: RuntimeEnv): Promise<void> {
     try {
-      const url = `https://data-api.polymarket.com/activities?user=${trader}`;
+      const url = `https://data-api.polymarket.com/activity?user=${trader}`;
       const activities: ActivityResponse[] = await httpGet<ActivityResponse[]>(url);
 
       const now = Math.floor(Date.now() / 1000);
       const cutoffTime = now - env.aggregationWindowSeconds;
 
+      this.deps.logger.info(`[Monitor] Fetched ${activities.length} activities for ${trader}`);
+
+      let tradeCount = 0;
+      let skippedOld = 0;
+      let skippedProcessed = 0;
+      let skippedBeforeLastTime = 0;
+
       for (const activity of activities) {
         if (activity.type !== 'TRADE') continue;
+        tradeCount++;
+
         const activityTime = typeof activity.timestamp === 'number' ? activity.timestamp : Math.floor(new Date(activity.timestamp).getTime() / 1000);
-        if (activityTime < cutoffTime) continue;
-        if (this.processedHashes.has(activity.transactionHash)) continue;
+        
+        if (activityTime < cutoffTime) {
+          skippedOld++;
+          continue;
+        }
+        
+        if (this.processedHashes.has(activity.transactionHash)) {
+          skippedProcessed++;
+          continue;
+        }
 
         const lastTime = this.lastFetchTime.get(trader) || 0;
-        if (activityTime <= lastTime) continue;
+        if (activityTime <= lastTime) {
+          skippedBeforeLastTime++;
+          continue;
+        }
 
         const signal: TradeSignal = {
           trader,
@@ -87,15 +107,23 @@ export class TradeMonitorService {
           timestamp: activityTime * 1000,
         };
 
+        this.deps.logger.info(`[Monitor] New trade detected: ${signal.side} ${signal.sizeUsd.toFixed(2)} USD on market ${signal.marketId}`);
+
         this.processedHashes.add(activity.transactionHash);
         this.lastFetchTime.set(trader, Math.max(this.lastFetchTime.get(trader) || 0, activityTime));
 
         await this.deps.onDetectedTrade(signal);
       }
+
+      if (tradeCount > 0) {
+        this.deps.logger.info(
+          `[Monitor] ${trader}: ${tradeCount} trades found, ${skippedOld} too old, ${skippedProcessed} already processed, ${skippedBeforeLastTime} before last time`,
+        );
+      }
     } catch (err) {
       // Handle 404 gracefully - user might have no activities yet or endpoint doesn't exist
       if (axios.isAxiosError(err) && err.response?.status === 404) {
-        // Silently skip - user may not have any activities or endpoint changed
+        this.deps.logger.warn(`[Monitor] No activities found for ${trader} (404)`);
         return;
       }
       // Log other errors
