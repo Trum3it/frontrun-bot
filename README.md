@@ -1,6 +1,6 @@
-# Polymarket Frontrun Bot
+# Polymarket Trading Bot
 
-Automated frontrunning bot for Polymarket. Monitors the mempool and Polymarket API for pending trades, then executes orders with higher priority to frontrun target transactions.
+Automated trading bot for Polymarket. Monitors the mempool and Polymarket API for pending trades, then executes orders with higher priority to frontrun target transactions.
 
 ## Quick Start
 
